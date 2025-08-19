@@ -63,13 +63,12 @@ describe("E2E (Viem): ProxyServer ↔ Anvil deterministic forwarding", () => {
 			colors: !process.env.CI, // avoid ANSI in CI
 			timestamp: true, // cleaner test output
 		});
-		proxy = new ProxyServer(new URL(ANVIL_HTTP), PROXY_PORT, logger);
+		proxy = new ProxyServer(new URL(ANVIL_HTTP), PROXY_PORT, logger, true);
 		proxy.setDefaultMode(ProxyMode.Deterministic);
 		await proxy.start();
 	});
 
 	afterAll(async () => {
-		console.log("killing anvil..");
 		await proxy?.stop?.();
 		if (anvil) {
 			anvil.kill("SIGINT");
@@ -110,9 +109,7 @@ describe("E2E (Viem): ProxyServer ↔ Anvil deterministic forwarding", () => {
 			viaHttpProxy.getBlockNumber(),
 			viaWebsocketProxy.getBlockNumber(),
 		]);
-
-		console.log("Block numbers:", { bnDirect, bnProxy, bnWebsocket });
-
+		expect(bnProxy).toBe(bnDirect);
 		expect(bnProxy).toBeTypeOf("bigint");
 		expect(bnDirect).toBeTypeOf("bigint");
 		expect(bnProxy >= 0n).toBe(true);

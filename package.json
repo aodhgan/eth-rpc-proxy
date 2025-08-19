@@ -1,18 +1,59 @@
 {
-	"name": "rpc-proxy",
+	"name": "eth-rpc-proxy",
+	"version": "0.1.0-beta.0",
+	"description": "Lightweight JSON-RPC (HTTP + WS) proxy for Ethereum clients with deterministic & random behaviors.",
 	"type": "module",
-	"version": "1.0.0",
-	"description": "",
-	"main": "index.js",
+	"private": false,
+	"license": "MIT",
+	"author": "",
+	"keywords": [
+		"ethereum",
+		"json-rpc",
+		"proxy",
+		"websocket",
+		"testing",
+		"anvil",
+		"viem"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"main": "dist/index.js",
+	"module": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"src"
+	],
+	"sideEffects": false,
 	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"prepublishOnly": "pnpm build",
 		"test": "vitest",
 		"lint": "biome check --write .",
 		"fmt": "biome format --write ."
 	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
+
+	"publishConfig": {
+		"access": "public",
+		"tag": "beta"
+	},
+
 	"packageManager": "pnpm@10.7.1",
+
+	"dependencies": {
+		"@hono/node-server": "^1.19.0",
+		"@hono/node-ws": "^1.2.0",
+		"hono": "^4.9.2"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.2.0",
 		"@types/node": "^24.3.0",
@@ -23,10 +64,5 @@
 		"viem": "^2.34.0",
 		"vitest": "^3.2.4",
 		"ws": "^8.18.3"
-	},
-	"dependencies": {
-		"@hono/node-server": "^1.19.0",
-		"@hono/node-ws": "^1.2.0",
-		"hono": "^4.9.2"
 	}
 }

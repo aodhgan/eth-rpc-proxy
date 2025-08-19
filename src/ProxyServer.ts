@@ -1,17 +1,18 @@
 import type { Server as HttpServer } from "node:http";
-import type { Http2SecureServer, Http2Server } from "node:http2";
 import type { Server as HttpsServer } from "node:https";
+import type { Http2Server, Http2SecureServer } from "node:http2";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { WSContext } from "hono/ws";
-import type WebSocketLib from "ws"; // the 'ws' WebSocket type
-import NodeWS from "ws";
+import type WebSocketLib from "ws";
+import NodeWS, { type RawData } from "ws";
 import type { TaggedLogger } from "./utils/logger";
 import { waitForCondition } from "./utils/waitForCondition";
 
+// Prefer native WebSocket (workers), otherwise node 'ws'
 const WebSocketImpl: typeof NodeWS =
 	(globalThis as any).WebSocket ?? (NodeWS as unknown as typeof NodeWS);
 
@@ -55,6 +56,25 @@ type RuleConfig =
 			probs: Record<ProxyBehavior, number>;
 	  };
 
+// -------- ws helpers --------
+function rawDataToUint8OrString(data: RawData): string | Uint8Array {
+	if (typeof data === "string") return data;
+	if (data instanceof ArrayBuffer) return new Uint8Array(data);
+	if (Array.isArray(data)) return Buffer.concat(data); // Buffer[] -> Buffer (Uint8Array)
+	return new Uint8Array(data as Buffer);
+}
+
+function rawDataToString(data: RawData): string {
+	if (typeof data === "string") return data;
+	if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
+	if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
+	return (data as Buffer).toString("utf8");
+}
+
+function truncateForLog(s: string, max = 2000): string {
+	return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
 // -----------------------
 
 export class ProxyServer {
@@ -77,6 +97,7 @@ export class ProxyServer {
 		upstreamUrl: string | URL,
 		proxyPort: number,
 		private logger?: TaggedLogger,
+		private logResponses: boolean = false, // <— enable response body logging
 	) {
 		this.#UPSTREAM = upstreamUrl instanceof URL ? upstreamUrl : new URL(upstreamUrl);
 		this.#PROXY_PORT = proxyPort;
@@ -106,15 +127,19 @@ export class ProxyServer {
 			const sum = (Object.values(probs) as number[]).reduce((a, b) => a + b, 0);
 			if (Math.abs(sum - 1) > 1e-12) throw new Error("Probs must sum to 1");
 			this.defaultProbs = probs;
+			this.logger?.trace(`Default mode set: Random (probs=${JSON.stringify(probs)})`);
 		} else {
 			this.defaultProbs = undefined;
+			this.logger?.trace("Default mode set: Deterministic");
 		}
 	}
 	public addBehavior(behavior: ProxyBehavior): void {
 		this.defaultQueue.push(behavior);
+		this.logger?.trace(`Default queue +1 → [${this.defaultQueue.join(", ")}]`);
 	}
 	public clearDefaultQueue(): void {
 		this.defaultQueue.length = 0;
+		this.logger?.trace("Default queue cleared");
 	}
 
 	// ------- public API: rules -------
@@ -135,6 +160,18 @@ export class ProxyServer {
 		}
 
 		this.rules.push(rule);
+
+		const matcher =
+			typeof match === "string" ? match : match instanceof RegExp ? match.toString() : "fn";
+		if (rule.mode === ProxyMode.Random) {
+			this.logger?.trace(
+				`Rule added for ${matcher}: Random (probs=${JSON.stringify(rule.probs)})`,
+			);
+		} else {
+			this.logger?.trace(
+				`Rule added for ${matcher}: Deterministic queue=[${rule.queue.join(", ")}]`,
+			);
+		}
 	}
 
 	/** Push another deterministic behavior onto an existing deterministic rule’s queue. */
@@ -144,22 +181,30 @@ export class ProxyServer {
 		);
 		if (!rule) throw new Error("No deterministic rule found for provided matcher");
 		rule.queue.push(behavior);
+
+		const matcher =
+			typeof match === "string" ? match : match instanceof RegExp ? match.toString() : "fn";
+		this.logger?.trace(`Rule ${matcher}: +1 behavior → ${behavior}`);
 	}
 
 	public clearRules(): void {
 		this.rules.length = 0;
+		this.logger?.trace("All rules cleared");
 	}
 
 	// ------- lifecycle -------
 	public async start(): Promise<void> {
 		this.server = serve({ fetch: this.app.fetch, port: this.#PROXY_PORT }) as AnyServer;
+		this.logger?.info(`Proxy listening on :${this.#PROXY_PORT} → ${this.upstreamHttpUrl}`);
 		this.injectWebSocket?.(this.server);
 	}
 	public async stop(): Promise<void> {
+		this.logger?.info("Stopping proxy…");
 		await new Promise<void>((resolve, reject) => {
 			if (!this.server) return resolve();
 			(this.server as any).close((err?: unknown) => (err ? reject(err) : resolve()));
 		});
+		this.logger?.info("Proxy stopped.");
 	}
 
 	// ------- behavior selection/execution -------
@@ -198,6 +243,7 @@ export class ProxyServer {
 	private handleBehaviorHttp(c: Context, behavior: ProxyBehavior): Response | null {
 		switch (behavior) {
 			case ProxyBehavior.NotAnswer: {
+				this.logger?.info("[http] ✋ NotAnswer (swallowing response)");
 				// Send headers and never finish body — client hangs on body read.
 				const neverEndingBody = new ReadableStream<Uint8Array>({});
 				return new Response(neverEndingBody, {
@@ -206,8 +252,8 @@ export class ProxyServer {
 				});
 			}
 			case ProxyBehavior.Fail:
+				this.logger?.info("[http] ❌ Fail — returning 500");
 				return c.json({ error: "Proxy error" }, 500);
-			case ProxyBehavior.Forward:
 			default:
 				return null;
 		}
@@ -220,9 +266,10 @@ export class ProxyServer {
 	): boolean {
 		switch (behavior) {
 			case ProxyBehavior.NotAnswer:
-				// swallow: no forward, no response
-				return true;
+				this.logger?.info("[ws] ✋ NotAnswer (not forwarding, no response)");
+				return true; // swallow
 			case ProxyBehavior.Fail:
+				this.logger?.info("[ws] ❌ Fail — sending error frame");
 				appClient.send(
 					JSON.stringify({
 						id: parsed.id,
@@ -231,7 +278,6 @@ export class ProxyServer {
 					}),
 				);
 				return true;
-			case ProxyBehavior.Forward:
 			default:
 				return false;
 		}
@@ -246,17 +292,25 @@ export class ProxyServer {
 			"*",
 			upgradeWebSocket((_c) => {
 				const upstream = new WebSocketImpl(this.upstreamWsUrl);
-				const requestIdMap = new Map<number | string, { data: any; start: number }>();
+				const requestIdMap = new Map<number | string, { method: string; start: number }>();
 
 				return {
 					onMessage: (msg, appClient) => {
 						const parsed = JSON.parse(msg.data.toString());
-						const behavior = this.getBehavior(parsed.method);
+						const paramsStr = parsed.params ? ` ${JSON.stringify(parsed.params)}` : "";
+						this.logger?.info(`[ws] -> ${parsed.method ?? "unknown"}${paramsStr}`);
 
+						const behavior = this.getBehavior(parsed.method);
 						const handled = this.handleBehaviorWs(behavior, parsed, appClient);
 						if (handled) return;
 
-						requestIdMap.set(parsed.id, { data: parsed, start: performance.now() });
+						if (parsed.id != null) {
+							requestIdMap.set(parsed.id, {
+								method: parsed.method,
+								start: performance.now(),
+							});
+							setTimeout(() => requestIdMap.delete(parsed.id), 30_000); // GC safeguard
+						}
 
 						waitForCondition(
 							() => upstream.readyState === WebSocketImpl.OPEN,
@@ -271,19 +325,40 @@ export class ProxyServer {
 							);
 					},
 
-					onClose: () => upstream.close(),
+					onClose: () => {
+						this.logger?.info("[ws] client disconnected");
+						upstream.close();
+					},
 
 					onOpen: (_evt, appClient) => {
-						upstream.addEventListener("message", (msg) => {
-							const parsed = JSON.parse(msg.data.toString());
-							const cached = requestIdMap.get(parsed.id);
-							if (cached) {
-								const ms =
-									Math.round((performance.now() - cached.start) * 1000) / 1000;
+						this.logger?.info("[ws] client connected");
+
+						upstream.addEventListener("message", (raw) => {
+							const text = rawDataToString((raw as any).data ?? raw);
+							const parsed = JSON.parse(text);
+
+							if (parsed.id != null) {
+								const cached = requestIdMap.get(parsed.id);
+								if (cached) {
+									const ms =
+										Math.round((performance.now() - cached.start) * 1000) /
+										1000;
+									const bodyLog = this.logResponses
+										? ` <= ${truncateForLog(text)}`
+										: "";
+									this.logger?.trace(
+										`(websocket) ${ms.toString().padEnd(8, "0")}ms => ${cached.method}${bodyLog}`,
+									);
+									requestIdMap.delete(parsed.id);
+								} else if (this.logResponses) {
+									// response with id we didn't initiate (rare), still log if requested
+									this.logger?.trace(`[websocket] <= ${truncateForLog(text)}`);
+								}
+							} else if (this.logResponses) {
+								// Notification (e.g., eth_subscription)
 								this.logger?.trace(
-									`(websocket) ${ms.toString().padEnd(8, "0")}ms => ${cached.data.method}`,
+									`[websocket] <= notification ${truncateForLog(text)}`,
 								);
-								requestIdMap.delete(parsed.id);
 							}
 
 							waitForCondition(
@@ -291,7 +366,14 @@ export class ProxyServer {
 								1000,
 								100,
 							)
-								.then(() => appClient.send(msg.data))
+								.then(() =>
+									appClient.send(
+										rawDataToUint8OrString((raw as any).data ?? raw) as
+											| string
+											| ArrayBuffer
+											| Uint8Array,
+									),
+								)
 								.catch(() =>
 									this.logger?.error(
 										"Proxy WS client is not open; cannot forward responses from upstream",
@@ -311,6 +393,11 @@ export class ProxyServer {
 			const body = await c.req.json();
 			const behavior = this.getBehavior(body.method);
 
+			// High-level request log
+			this.logger?.info(
+				`[http] -> ${body.method}${body.params ? " " + JSON.stringify(body.params) : ""}`,
+			);
+
 			const maybe = this.handleBehaviorHttp(c, behavior);
 			if (maybe) return maybe;
 
@@ -327,7 +414,16 @@ export class ProxyServer {
 				});
 				const data = await resp.json();
 				const ms = Math.round((performance.now() - start) * 1000) / 1000;
-				this.logger?.trace(`(http) ${ms.toString().padEnd(8, "0")}ms => ${body.method}`);
+
+				const paramsStr = body.params ? ` ${JSON.stringify(body.params)}` : "";
+				const responseLog = this.logResponses
+					? ` <= ${truncateForLog(JSON.stringify(data))}`
+					: "";
+
+				this.logger?.trace(
+					`(http) ${ms.toString().padEnd(8, "0")}ms => ${body.method}${paramsStr}${responseLog}`,
+				);
+
 				return c.json(data, resp.status as ContentfulStatusCode);
 			} catch (error) {
 				return c.json({ error: `Proxy error: ${JSON.stringify(error)}` }, 500);

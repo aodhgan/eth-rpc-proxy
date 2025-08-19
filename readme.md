@@ -37,7 +37,7 @@ console.log(`Proxy running at http://localhost:8546`);
 ```
 
 ### Control Behaviour
-```ts
+```tsthe 
 // Deterministic mode: drop the next eth_sendRawTransaction call
 proxy.addBehavior(ProxyBehavior.NotAnswer);
 

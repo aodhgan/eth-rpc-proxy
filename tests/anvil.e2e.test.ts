@@ -1,5 +1,3 @@
-// tests/anvil.viem.e2e.test.ts
-
 import { type ChildProcess, spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { createPublicClient, createWalletClient, http, parseEther, webSocket } from "viem";

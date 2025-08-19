@@ -1,7 +1,9 @@
-# 📦 rpc-proxy
-
+# 📦 eth-rpc-proxy
 A lightweight proxy server for **JSON-RPC (HTTP + WebSocket)** built on [Hono](https://hono.dev).  
-Useful for testing, debugging, and simulating different network behaviors (forward, drop, fail).
+Useful for testing, debugging, and simulating RPC calls over different network behaviors (forward, drop, fail).
+
+![Diagram](./static/diagram.png)
+
 
 ---
 
@@ -16,9 +18,9 @@ Useful for testing, debugging, and simulating different network behaviors (forwa
 ## 📦 Installation
 
 ```bash
-pnpm add rpc-proxy
+pnpm add eth-rpc-proxy
 # or
-npm install rpc-proxy
+npm install eth-rpc-proxy
 ```
 
 ## Usage

@@ -81,12 +81,7 @@ export class Logger {
 		return this.minLevel;
 	}
 
-	private minSpanEventLogLevel: LogLevel = LogLevel.OFF;
-	get spanEventLogLevel(): LogLevel {
-		return this.spanEventLogLevel;
-	}
-
-	/**
+    /**
 	 * To show or not show the timestamp in the log messages.
 	 * Defaults to true.
 	 */
@@ -163,15 +158,6 @@ export class Logger {
 	}
 
 	/**
-	 * Sets the minimum log level for span events. Messages below this level will not be added as span events.
-	 *
-	 * @param level The minimum log level for span events to set.
-	 */
-	public setSpanEventLogLevel(level: LogLevel): void {
-		this.minSpanEventLogLevel = level;
-	}
-
-	/**
 	 * Enables logging for the specified tags.
 	 *
 	 * @param tags The tags to enable.
@@ -198,16 +184,10 @@ export class Logger {
 	 */
 	private shouldLog(level: LogLevel, inputTags: LogTag[]): boolean {
 		// we skip logging. For example, if minLevel=ERROR, then WARN/INFO/TRACE won't show.
-		if (level > this.minLevel) return false;
+		if (level < this.minLevel) return false;
 		// If no tags are enabled, skip everything.
 		if (this.enabledTags.size === 0) return false;
 		// Check if any of the log's tags is in the enabled set.
-		return inputTags.some((tag) => this.enabledTags.has(tag));
-	}
-
-	private shouldAddSpanEvent(level: LogLevel, inputTags: LogTag[]): boolean {
-		if (level > this.minSpanEventLogLevel) return false;
-		if (this.enabledTags.size === 0) return false;
 		return inputTags.some((tag) => this.enabledTags.has(tag));
 	}
 

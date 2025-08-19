@@ -1,4 +1,3 @@
-// src/ProxyServer.ts
 import type { Server as HttpServer } from "node:http";
 import type { Http2SecureServer, Http2Server } from "node:http2";
 import type { Server as HttpsServer } from "node:https";

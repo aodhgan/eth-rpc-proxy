@@ -1,4 +1,6 @@
 # 📦 eth-rpc-proxy
+[![CI - Tests](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml/badge.svg)](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml)
+
 A lightweight RPC proxy server for **JSON-RPC (HTTP + WebSocket)** built on [Hono](https://hono.dev).  
 Useful for testing, debugging, and simulating RPC calls over different network behaviors (forward, drop, fail).
 

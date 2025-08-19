@@ -5,6 +5,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ProxyBehavior, ProxyMode, ProxyServer } from "../src/ProxyServer";
+import { Logger, LogLevel } from "../src/utils/logger";
 
 const ANVIL_HOST = "127.0.0.1";
 const ANVIL_PORT = 8555; // use a less-common port
@@ -57,7 +58,12 @@ describe("E2E (Viem): ProxyServer ↔ Anvil deterministic forwarding", () => {
 		await waitForAnvilHealthy(ANVIL_HTTP);
 
 		// 3) Start proxy in deterministic mode (forwards by default)
-		proxy = new ProxyServer(new URL(ANVIL_HTTP), PROXY_PORT);
+		const logger = Logger.create("EthRpcProxy", {
+			level: LogLevel.TRACE, // show everything in tests
+			colors: !process.env.CI, // avoid ANSI in CI
+			timestamp: false, // cleaner test output
+		});
+		proxy = new ProxyServer(new URL(ANVIL_HTTP), PROXY_PORT, logger);
 		proxy.setDefaultMode(ProxyMode.Deterministic);
 		await proxy.start();
 	});

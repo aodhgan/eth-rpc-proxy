@@ -81,7 +81,7 @@ export class Logger {
 		return this.minLevel;
 	}
 
-    /**
+	/**
 	 * To show or not show the timestamp in the log messages.
 	 * Defaults to true.
 	 */

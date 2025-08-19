@@ -1,9 +1,16 @@
 # 📦 eth-rpc-proxy
-A lightweight proxy server for **JSON-RPC (HTTP + WebSocket)** built on [Hono](https://hono.dev).  
+A lightweight RPC proxy server for **JSON-RPC (HTTP + WebSocket)** built on [Hono](https://hono.dev).  
 Useful for testing, debugging, and simulating RPC calls over different network behaviors (forward, drop, fail).
 
 ![Diagram](./static/diagram.png)
 
+Get programmatic logs like:
+[TRACE] [EthRpcProxy] (http) 1.119000ms => eth_getBlockByNumber
+[TRACE] [EthRpcProxy] (http) 1.301000ms => eth_getBalance
+[TRACE] [EthRpcProxy] (http) 0.811000ms => eth_getTransactionCount
+[TRACE] [EthRpcProxy] (http) 1.027000ms => eth_getBlockByNumber
+[TRACE] [EthRpcProxy] (http) 0.563000ms => eth_maxPriorityFeePerGas
+[TRACE] [EthRpcProxy] (http) 0.815000ms => eth_estimateGas
 
 ---
 
@@ -39,7 +46,7 @@ console.log(`Proxy running at http://localhost:8546`);
 ```
 
 ### Control Behaviour
-```tsthe 
+```ts
 // Deterministic mode: drop the next eth_sendRawTransaction call
 proxy.addBehavior(ProxyBehavior.NotAnswer);
 

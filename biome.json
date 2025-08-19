@@ -1,0 +1,12 @@
+{
+	"formatter": {
+		"indentStyle": "tab",
+		"indentWidth": 4,
+		"lineWidth": 100
+	},
+	"linter": {
+		"rules": {
+			"recommended": true
+		}
+	}
+}

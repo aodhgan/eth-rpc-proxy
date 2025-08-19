@@ -61,7 +61,7 @@ describe("E2E (Viem): ProxyServer ↔ Anvil deterministic forwarding", () => {
 		const logger = Logger.create("EthRpcProxy", {
 			level: LogLevel.TRACE, // show everything in tests
 			colors: !process.env.CI, // avoid ANSI in CI
-			timestamp: false, // cleaner test output
+			timestamp: true, // cleaner test output
 		});
 		proxy = new ProxyServer(new URL(ANVIL_HTTP), PROXY_PORT, logger);
 		proxy.setDefaultMode(ProxyMode.Deterministic);

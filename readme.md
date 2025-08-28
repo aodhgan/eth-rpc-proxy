@@ -1,5 +1,6 @@
 # 📦 eth-rpc-proxy
 [![CI - Tests](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml/badge.svg)](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml)
+[![npm version](https://img.shields.io/npm/v/eth-rpc-proxy)](https://www.npmjs.com/package/eth-rpc-proxy)
 
 A lightweight NodeJS RPC proxy server for JSON-RPC (HTTP + WebSocket) built on [Hono](https://hono.dev).  
 Useful for **testing, debugging, and simulating** RPC calls over different network behaviors (forward, drop, fail).

@@ -1,8 +1,8 @@
 # 📦 eth-rpc-proxy
 [![CI - Tests](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml/badge.svg)](https://github.com/aodhgan/eth-rpc-proxy/actions/workflows/CI.yml)
 
-A lightweight NodeJS RPC proxy server for **JSON-RPC (HTTP + WebSocket)** built on [Hono](https://hono.dev).  
-Useful for testing, debugging, and simulating RPC calls over different network behaviors (forward, drop, fail).
+A lightweight NodeJS RPC proxy server for JSON-RPC (HTTP + WebSocket) built on [Hono](https://hono.dev).  
+Useful for **testing, debugging, and simulating** RPC calls over different network behaviors (forward, drop, fail).
 
 ![Diagram](./static/diagram.png)
 
@@ -10,7 +10,7 @@ Useful for testing, debugging, and simulating RPC calls over different network b
 
 ## Features
 - 🚀 Forward JSON-RPC requests (HTTP + WS) to an upstream node (e.g. Anvil, Geth, Hardhat)  
-- 🎲 Deterministic or probabilistic (chaos) proxy behavior (forward / not answer / fail)  
+- 🎲 Deterministic or probabilistic (chaos) proxy behavior (forward / not answer / fail) allows observing/testing application behaviour 
 - 🔌 WebSocket + HTTP support  
 - 🧪 Designed for testing blockchain RPC clients  
 
@@ -27,9 +27,10 @@ npm install eth-rpc-proxy
 ## Usage
 ### Basic Example
 See what your client is doing under the hood! (A single Viem `sendTransaction` may be doing more than you think.)
-Get programmatic logs like:
+Easily get programmatic logs like:
 
 ```ts
+    import {ProxyServer} from "eth-proxy-server"
     ...
     proxy = new ProxyServer(new URL("http://localhost:8545"), 3000, logger); // forward requests to Anvil (already running)
     proxy.setDefaultMode(ProxyMode.Deterministic); // mode to forward all requests

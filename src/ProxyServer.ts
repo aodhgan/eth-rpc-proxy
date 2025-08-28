@@ -8,9 +8,10 @@ import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { WSContext } from "hono/ws";
 import type WebSocketLib from "ws";
-import NodeWS, { type RawData } from "ws";
+import NodeWS from "ws";
 import type { TaggedLogger } from "./utils/logger";
 import { waitForCondition } from "./utils/waitForCondition";
+import { rawDataToUint8OrString, rawDataToString, truncateForLog, matches } from "./utils/helpers";
 
 // Prefer native WebSocket (workers), otherwise node 'ws'
 const WebSocketImpl: typeof NodeWS =
@@ -30,19 +31,13 @@ export enum ProxyMode {
 type AnyServer = HttpServer | HttpsServer | Http2Server | Http2SecureServer;
 
 // -------- rules --------
-type MethodMatcher = string | RegExp | ((method: string) => boolean);
+export type MethodMatcher = string | RegExp | ((method: string) => boolean);
 
 interface BehaviorRule {
 	match: MethodMatcher;
 	mode: ProxyMode;
 	queue: ProxyBehavior[]; // used when Deterministic
 	probs?: Record<ProxyBehavior, number>; // used when Random
-}
-
-function matches(m: MethodMatcher, method: string): boolean {
-	if (typeof m === "string") return method === m;
-	if (m instanceof RegExp) return m.test(method);
-	return m(method);
 }
 
 type RuleConfig =
@@ -55,27 +50,6 @@ type RuleConfig =
 			mode: ProxyMode.Random;
 			probs: Record<ProxyBehavior, number>;
 	  };
-
-// -------- ws helpers --------
-function rawDataToUint8OrString(data: RawData): string | Uint8Array {
-	if (typeof data === "string") return data;
-	if (data instanceof ArrayBuffer) return new Uint8Array(data);
-	if (Array.isArray(data)) return Buffer.concat(data); // Buffer[] -> Buffer (Uint8Array)
-	return new Uint8Array(data as Buffer);
-}
-
-function rawDataToString(data: RawData): string {
-	if (typeof data === "string") return data;
-	if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
-	if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
-	return (data as Buffer).toString("utf8");
-}
-
-function truncateForLog(s: string, max = 2000): string {
-	return s.length > max ? s.slice(0, max) + "…" : s;
-}
-
-// -----------------------
 
 export class ProxyServer {
 	readonly #PROXY_PORT: number;
@@ -208,13 +182,13 @@ export class ProxyServer {
 	}
 
 	// ------- behavior selection/execution -------
-	private pickRule(method: string): BehaviorRule | null {
+	#pickRule(method: string): BehaviorRule | null {
 		for (const r of this.rules) if (matches(r.match, method)) return r;
 		return null;
 	}
 
-	private getBehavior(method: string): ProxyBehavior {
-		const rule = this.pickRule(method);
+	#getBehavior(method: string): ProxyBehavior {
+		const rule = this.#pickRule(method);
 		if (rule) {
 			if (rule.mode === ProxyMode.Random) {
 				return this.#getBehaviorFromProbs(rule.probs);
@@ -239,7 +213,7 @@ export class ProxyServer {
 		return ProxyBehavior.Forward;
 	}
 
-	private handleBehaviorHttp(c: Context, behavior: ProxyBehavior): Response | null {
+	#handleBehaviorHttp(c: Context, behavior: ProxyBehavior): Response | null {
 		switch (behavior) {
 			case ProxyBehavior.NotAnswer: {
 				this.logger?.info("[http] ✋ NotAnswer (swallowing response)");
@@ -258,7 +232,7 @@ export class ProxyServer {
 		}
 	}
 
-	private handleBehaviorWs(
+	#handleBehaviorWs(
 		behavior: ProxyBehavior,
 		parsed: any,
 		appClient: WSContext<WebSocketLib>,
@@ -299,8 +273,8 @@ export class ProxyServer {
 						const paramsStr = parsed.params ? ` ${JSON.stringify(parsed.params)}` : "";
 						this.logger?.info(`[ws] -> ${parsed.method ?? "unknown"}${paramsStr}`);
 
-						const behavior = this.getBehavior(parsed.method);
-						const handled = this.handleBehaviorWs(behavior, parsed, appClient);
+						const behavior = this.#getBehavior(parsed.method);
+						const handled = this.#handleBehaviorWs(behavior, parsed, appClient);
 						if (handled) return;
 
 						if (parsed.id != null) {
@@ -390,14 +364,14 @@ export class ProxyServer {
 	#setupHttpProxy(): void {
 		this.app.post("*", async (c) => {
 			const body = await c.req.json();
-			const behavior = this.getBehavior(body.method);
+			const behavior = this.#getBehavior(body.method);
 
 			// High-level request log
 			this.logger?.info(
 				`[http] -> ${body.method}${body.params ? " " + JSON.stringify(body.params) : ""}`,
 			);
 
-			const maybe = this.handleBehaviorHttp(c, behavior);
+			const maybe = this.#handleBehaviorHttp(c, behavior);
 			if (maybe) return maybe;
 
 			// Forward

@@ -29,5 +29,9 @@ describe("ProxyServer - Remote RPC e2e", () => {
 		expect(res.status).toBe(200);
 		expect(res.body).toHaveProperty("result");
 		expect(typeof res.body.result).toBe("string");
+		const blockNumberHex = res.body.result;
+		expect(typeof blockNumberHex).toBe("string");
+		const blockNumber = Number(blockNumberHex);
+		expect(blockNumber).toBeGreaterThanOrEqual(0);
 	});
 });

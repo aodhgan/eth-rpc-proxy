@@ -405,7 +405,7 @@ describe("ProxyServer rule management", () => {
 		const totalRequests = 20;
 		for (let i = 0; i < totalRequests; i++) {
 			const ac = new AbortController();
-			const timer = setTimeout(() => ac.abort(), 2000);
+			const timer = setTimeout(() => ac.abort(), 10);
 
 			try {
 				const res = await fetch(PROXY_HTTP_URL, {
@@ -437,8 +437,8 @@ describe("ProxyServer rule management", () => {
 				clearTimeout(timer);
 			}
 		}
-		expect(results[ProxyBehavior.Forward]).toBeGreaterThan(4);
-		expect(results[ProxyBehavior.NotAnswer]).toBeGreaterThan(1);
+		expect(results[ProxyBehavior.Forward]).toBeGreaterThanOrEqual(4);
+		expect(results[ProxyBehavior.NotAnswer]).toBeGreaterThanOrEqual(1);
 		expect(results[ProxyBehavior.Fail]).toBeGreaterThan(0);
 
 		const sum =

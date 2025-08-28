@@ -97,7 +97,7 @@ export class ProxyServer {
 		upstreamUrl: string | URL,
 		proxyPort: number,
 		private logger?: TaggedLogger,
-		private logResponses: boolean = false, // <— enable response body logging
+		private logResponses: boolean = false,
 	) {
 		this.#UPSTREAM = upstreamUrl instanceof URL ? upstreamUrl : new URL(upstreamUrl);
 		this.#PROXY_PORT = proxyPort;
@@ -177,7 +177,7 @@ export class ProxyServer {
 	/** Push another deterministic behavior onto an existing deterministic rule’s queue. */
 	public pushRuleBehavior(match: MethodMatcher, behavior: ProxyBehavior): void {
 		const rule = this.rules.find(
-			(r) => r.mode === ProxyMode.Deterministic && r.match === match,
+			(r) => r.mode === ProxyMode.Deterministic && String(r.match) === String(match),
 		);
 		if (!rule) throw new Error("No deterministic rule found for provided matcher");
 		rule.queue.push(behavior);
@@ -217,27 +217,26 @@ export class ProxyServer {
 		const rule = this.pickRule(method);
 		if (rule) {
 			if (rule.mode === ProxyMode.Random) {
-				const r = Math.random();
-				const pNA = rule.probs?.[ProxyBehavior.NotAnswer] ?? 0;
-				const pFail = rule.probs?.[ProxyBehavior.Fail] ?? 0;
-				if (r < pNA) return ProxyBehavior.NotAnswer;
-				if (r < pNA + pFail) return ProxyBehavior.Fail;
-				return ProxyBehavior.Forward;
+				return this.#getBehaviorFromProbs(rule.probs);
 			} else {
 				return rule.queue.shift() ?? ProxyBehavior.Forward;
 			}
 		}
 
 		if (this.defaultMode === ProxyMode.Random) {
-			const r = Math.random();
-			const pNA = this.defaultProbs?.[ProxyBehavior.NotAnswer] ?? 0;
-			const pFail = this.defaultProbs?.[ProxyBehavior.Fail] ?? 0;
-			if (r < pNA) return ProxyBehavior.NotAnswer;
-			if (r < pNA + pFail) return ProxyBehavior.Fail;
-			return ProxyBehavior.Forward;
+			return this.#getBehaviorFromProbs(this.defaultProbs);
 		} else {
 			return this.defaultQueue.shift() ?? ProxyBehavior.Forward;
 		}
+	}
+
+	#getBehaviorFromProbs(probs?: Record<ProxyBehavior, number>): ProxyBehavior {
+		const r = Math.random();
+		const pNA = probs?.[ProxyBehavior.NotAnswer] ?? 0;
+		const pFail = probs?.[ProxyBehavior.Fail] ?? 0;
+		if (r < pNA) return ProxyBehavior.NotAnswer;
+		if (r < pNA + pFail) return ProxyBehavior.Fail;
+		return ProxyBehavior.Forward;
 	}
 
 	private handleBehaviorHttp(c: Context, behavior: ProxyBehavior): Response | null {

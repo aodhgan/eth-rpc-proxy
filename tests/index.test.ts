@@ -12,6 +12,7 @@ let proxy: ProxyServer;
 
 const UPSTREAM = new URL("http://127.0.0.1:4001");
 const PROXY_PORT = 4002;
+const PROXY_HTTP_URL = `http://127.0.0.1:${PROXY_PORT}`;
 
 // track upstream POST hits so we can assert "not forwarded"
 let upstreamReceived = 0;
@@ -59,10 +60,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await proxy.stop?.();
+	await proxy.stop();
 	await new Promise<void>((resolve) => upstreamWs.close(() => resolve()));
 	await new Promise<void>((resolve) => upstreamHttp.close(() => resolve()));
-});
+}, 15000);
 
 // Reset proxy behavior state before each test to avoid leakage
 beforeEach(() => {
@@ -115,7 +116,7 @@ describe("ProxyServer - WebSocket + HTTP forwarding & behaviors", () => {
 	});
 
 	it("still forwards HTTP POSTs while WS is attached", async () => {
-		const request = supertest(`http://127.0.0.1:${PROXY_PORT}`);
+		const request = supertest(PROXY_HTTP_URL);
 		const res = await request
 			.post("/")
 			.set("Content-Type", "application/json")
@@ -134,7 +135,7 @@ describe("ProxyServer - WebSocket + HTTP forwarding & behaviors", () => {
 		const ac = new AbortController();
 
 		// fetch resolves after headers; the 'hang' occurs when reading the body
-		const res = await fetch(`http://127.0.0.1:${PROXY_PORT}/`, {
+		const res = await fetch(PROXY_HTTP_URL, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -212,7 +213,7 @@ describe("ProxyServer - WebSocket + HTTP forwarding & behaviors", () => {
 		});
 
 		// HTTP: sendRawTransaction should fail
-		const request = supertest(`http://127.0.0.1:${PROXY_PORT}`);
+		const request = supertest(PROXY_HTTP_URL);
 		const failRes = await request
 			.post("/")
 			.set("Content-Type", "application/json")
@@ -281,4 +282,169 @@ describe("ProxyServer - WebSocket + HTTP forwarding & behaviors", () => {
 
 		client.close();
 	});
+});
+
+describe("ProxyServer rule management", () => {
+	it("adds and respects a simple string-based rule", async () => {
+		proxy.addRule("eth_blockNumber", ProxyBehavior.Fail);
+
+		const request = supertest(PROXY_HTTP_URL);
+		const res = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 1, jsonrpc: "2.0", method: "eth_blockNumber", params: [] });
+
+		expect(res.status).toBe(500);
+
+		// other methods should still be forwarded
+		const okRes = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 2, jsonrpc: "2.0", method: "eth_chainId", params: [] });
+
+		expect(okRes.status).toBe(200);
+	});
+
+	it("adds and respects a RegExp-based rule", async () => {
+		proxy.addRule(/^eth_/, ProxyBehavior.Fail);
+
+		const request = supertest(PROXY_HTTP_URL);
+		const res1 = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 1, jsonrpc: "2.0", method: "eth_blockNumber", params: [] });
+
+		expect(res1.status).toBe(500);
+
+		proxy.clearRules();
+
+		const res2 = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 2, jsonrpc: "2.0", method: "eth_chainId", params: [] });
+
+		expect(res2.status).toBe(200);
+	});
+
+	it("adds and respects a function-based rule", async () => {
+		proxy.addRule((method) => method.includes("block"), ProxyBehavior.Fail);
+
+		const request = supertest(PROXY_HTTP_URL);
+		const res = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 1, jsonrpc: "2.0", method: "eth_blockNumber", params: [] });
+
+		expect(res.status).toBe(500);
+	});
+
+	it("pushes behavior to an existing deterministic rule", async () => {
+		const match = /^eth_blockNumber$/;
+		proxy.addRule(match, ProxyBehavior.Fail);
+		proxy.pushRuleBehavior(match, ProxyBehavior.NotAnswer);
+
+		const request = supertest(PROXY_HTTP_URL);
+		const res1 = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 1, jsonrpc: "2.0", method: "eth_blockNumber", params: [] });
+
+		expect(res1.status).toBe(500);
+
+		const ac = new AbortController();
+		const res2 = await fetch(PROXY_HTTP_URL, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ id: 2, jsonrpc: "2.0", method: "eth_blockNumber", params: [] }),
+			signal: ac.signal,
+		});
+
+		let aborted = false;
+		const timer = setTimeout(() => ac.abort(), 600);
+		try {
+			await res2.text();
+		} catch (e: any) {
+			aborted = e?.name === "AbortError";
+		} finally {
+			clearTimeout(timer);
+		}
+		expect(aborted).toBe(true);
+	});
+
+	it("clears all rules", async () => {
+		proxy.addRule("eth_blockNumber", ProxyBehavior.Fail);
+		proxy.clearRules();
+
+		const request = supertest(PROXY_HTTP_URL);
+		const res = await request
+			.post("/")
+			.set("Content-Type", "application/json")
+			.send({ id: 1, jsonrpc: "2.0", method: "eth_blockNumber", params: [] });
+
+		expect(res.status).toBe(200);
+	});
+
+	it("respects random rule probabilities", async () => {
+		proxy.clearRules();
+		const probs = {
+			[ProxyBehavior.Forward]: 0.5,
+			[ProxyBehavior.NotAnswer]: 0.3,
+			[ProxyBehavior.Fail]: 0.2,
+		};
+		proxy.addRule("eth_blockNumber", {
+			mode: ProxyMode.Random,
+			probs,
+		});
+
+		const results = {
+			[ProxyBehavior.Forward]: 0,
+			[ProxyBehavior.NotAnswer]: 0,
+			[ProxyBehavior.Fail]: 0,
+		};
+
+		const totalRequests = 20;
+		for (let i = 0; i < totalRequests; i++) {
+			const ac = new AbortController();
+			const timer = setTimeout(() => ac.abort(), 2000);
+
+			try {
+				const res = await fetch(PROXY_HTTP_URL, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						id: i,
+						jsonrpc: "2.0",
+						method: "eth_blockNumber",
+						params: [],
+					}),
+					signal: ac.signal,
+				});
+
+				await res.text();
+
+				if (res.status === 200) {
+					results[ProxyBehavior.Forward]++;
+				} else if (res.status === 500) {
+					results[ProxyBehavior.Fail]++;
+				}
+			} catch (err: any) {
+				if (err.name === "AbortError") {
+					results[ProxyBehavior.NotAnswer]++;
+				} else {
+					throw err;
+				}
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+		expect(results[ProxyBehavior.Forward]).toBeGreaterThan(4);
+		expect(results[ProxyBehavior.NotAnswer]).toBeGreaterThan(1);
+		expect(results[ProxyBehavior.Fail]).toBeGreaterThan(0);
+
+		const sum =
+			results[ProxyBehavior.Forward] +
+			results[ProxyBehavior.NotAnswer] +
+			results[ProxyBehavior.Fail];
+		expect(sum).toBe(totalRequests);
+	}, 30000);
 });

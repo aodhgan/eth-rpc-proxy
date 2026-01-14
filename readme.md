@@ -14,6 +14,7 @@ Useful for **testing, debugging, and simulating** RPC calls over different netwo
 - 🎲 Deterministic or probabilistic (chaos) proxy behavior (forward / not answer / fail) allows observing/testing application behaviour 
 - 🔌 WebSocket + HTTP support  
 - 🧪 Designed for testing blockchain RPC clients  
+- ⏱️ Configurable pre-request and post-response delays for latency simulation  
 
 ---
 
@@ -169,11 +170,48 @@ If no rule matches, the default mode/queue/probs apply.
 | **Custom logic matcher**                | `proxy.addRule((m) => m.startsWith("eth_") && !m.includes("send"), ProxyBehavior.NotAnswer)`  | Flexible logic for targeting groups of methods.                      |
 | **Fail once every 3 calls** | `proxy.addRule("eth_call", { mode: ProxyMode.Deterministic, behaviors: [ProxyBehavior.Fail, ProxyBehavior.Forward, ProxyBehavior.Forward] }); proxy.pushRuleBehavior("eth_call", ProxyBehavior.Fail);` | Queue cycles fail → forward → forward → fail … |
 
+---
+
+## Request Time Delays
+
+Simulate network latency by adding configurable delays before and/or after each request. Useful for testing timeout handling, loading states, and slow network conditions.
+
+### Configuration
+
+**Via environment variables:**
+```bash
+PROXY_PRE_DELAY_MS=100 PROXY_POST_DELAY_MS=50 pnpm start
+```
+
+**Via API:**
+```ts
+proxy.setPreDelay(100);   // 100ms delay before forwarding request to upstream
+proxy.setPostDelay(50);   // 50ms delay after receiving response, before sending to client
+```
+
+### Delay Types
+
+| Delay | When Applied | Use Case |
+|-------|--------------|----------|
+| **Pre-delay** | Before forwarding request to upstream | Simulate slow request initiation, test client timeout before response starts |
+| **Post-delay** | After receiving upstream response, before sending to client | Simulate slow response delivery, test loading states |
+
+### Example: Testing Slow Network
+```ts
+const proxy = new ProxyServer(new URL("http://localhost:8545"), 3000, logger);
+proxy.setPreDelay(200);   // 200ms before each request
+proxy.setPostDelay(100);  // 100ms after each response
+await proxy.start();
+
+// All requests through the proxy will now have 300ms total added latency
+```
+
+---
 
 ## Testing
 To test this package, run:
 ```bash
 pnpm i
-pnpm test
+pnpm test --run
 ```
 

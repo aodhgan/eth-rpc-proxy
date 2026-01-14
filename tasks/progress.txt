@@ -35,3 +35,14 @@ Thread: https://ampcode.com/threads/T-019bba13-c92b-742d-b948-cea11f21922b
   - WebSocket upstream message handler needed to be made async to support await for delay
   - Pattern mirrors pre-delay but applied after receiving upstream response
 ---
+
+## 2026-01-13 - US-003
+Thread: https://ampcode.com/threads/T-019bba15-57b0-745e-8874-150377be8941
+- Added setPreDelay(ms: number) and setPostDelay(ms: number) methods to ProxyServer
+- Methods directly set preDelayMs and postDelayMs properties, overriding env var values
+- Added trace logging when methods are called
+- Files changed: src/ProxyServer.ts
+- **Learnings for future iterations:**
+  - Existing delay properties (preDelayMs, postDelayMs) are already private, so methods just set them directly
+  - bun is available for running tsc when pnpm/npx/node aren't in PATH
+---

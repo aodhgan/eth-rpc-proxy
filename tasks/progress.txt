@@ -22,3 +22,16 @@ Thread: https://ampcode.com/threads/T-019bba0f-34e1-716c-8dcc-243ea8aa9eeb
   - WebSocket onMessage handler made async to support await for delay
 ---
 
+
+## 2026-01-13 - US-002
+Thread: https://ampcode.com/threads/T-019bba13-c92b-742d-b948-cea11f21922b
+- Implemented post-response delay via PROXY_POST_DELAY_MS environment variable
+- Added `postDelayMs` property to ProxyServer read from env
+- Applied post-delay in HTTP handler (after fetch response, before returning to client)
+- Applied post-delay in WebSocket handler (made upstream message listener async, added await before sending to client)
+- Added logging at startup when post-delay is set
+- Files changed: src/ProxyServer.ts
+- **Learnings for future iterations:**
+  - WebSocket upstream message handler needed to be made async to support await for delay
+  - Pattern mirrors pre-delay but applied after receiving upstream response
+---

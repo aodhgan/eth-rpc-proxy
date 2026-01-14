@@ -181,6 +181,17 @@ export class ProxyServer {
 		this.logger?.trace("All rules cleared");
 	}
 
+	// ------- public API: delay configuration -------
+	public setPreDelay(ms: number): void {
+		this.preDelayMs = ms;
+		this.logger?.trace(`Pre-delay set: ${ms}ms`);
+	}
+
+	public setPostDelay(ms: number): void {
+		this.postDelayMs = ms;
+		this.logger?.trace(`Post-delay set: ${ms}ms`);
+	}
+
 	// ------- lifecycle -------
 	public async start(): Promise<void> {
 		this.server = serve({ fetch: this.app.fetch, port: this.#PROXY_PORT }) as AnyServer;

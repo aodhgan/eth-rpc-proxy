@@ -70,6 +70,7 @@ export class ProxyServer {
 
 	// delay configuration
 	private preDelayMs: number = 0;
+	private postDelayMs: number = 0;
 
 	constructor(
 		upstreamUrl: string | URL,
@@ -84,6 +85,10 @@ export class ProxyServer {
 		const preDelayEnv = process.env.PROXY_PRE_DELAY_MS;
 		if (preDelayEnv) {
 			this.preDelayMs = Number.parseInt(preDelayEnv, 10) || 0;
+		}
+		const postDelayEnv = process.env.PROXY_POST_DELAY_MS;
+		if (postDelayEnv) {
+			this.postDelayMs = Number.parseInt(postDelayEnv, 10) || 0;
 		}
 
 		this.app = new Hono();
@@ -182,6 +187,9 @@ export class ProxyServer {
 		this.logger?.info(`Proxy listening on :${this.#PROXY_PORT} → ${this.upstreamHttpUrl}`);
 		if (this.preDelayMs > 0) {
 			this.logger?.info(`Pre-delay: ${this.preDelayMs}ms`);
+		}
+		if (this.postDelayMs > 0) {
+			this.logger?.info(`Post-delay: ${this.postDelayMs}ms`);
 		}
 		this.injectWebSocket?.(this.server);
 	}
@@ -324,7 +332,7 @@ export class ProxyServer {
 					onOpen: (_evt, appClient) => {
 						this.logger?.info("[ws] client connected");
 
-						upstream.addEventListener("message", (raw) => {
+						upstream.addEventListener("message", async (raw) => {
 							const text = rawDataToString((raw as any).data ?? raw);
 							const parsed = JSON.parse(text);
 
@@ -350,6 +358,11 @@ export class ProxyServer {
 								this.logger?.trace(
 									`[websocket] <= notification ${truncateForLog(text)}`,
 								);
+							}
+
+							// Apply post-delay before sending response to client
+							if (this.postDelayMs > 0) {
+								await sleep(this.postDelayMs);
 							}
 
 							waitForCondition(
@@ -419,6 +432,11 @@ export class ProxyServer {
 				this.logger?.trace(
 					`(http) ${ms.toString().padEnd(8, "0")}ms => ${body.method}${paramsStr}${responseLog}`,
 				);
+
+				// Apply post-delay before sending response to client
+				if (this.postDelayMs > 0) {
+					await sleep(this.postDelayMs);
+				}
 
 				return c.json(data, resp.status as ContentfulStatusCode);
 			} catch (error) {

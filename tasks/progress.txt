@@ -1,7 +1,24 @@
 ## Codebase Patterns
-(Patterns will be added as they are discovered)
+- Use `sleep` utility from `src/utils/sleep.ts` for async delays
+- ProxyServer reads env vars in constructor for configuration
+- Pre-delay is applied in both HTTP (#setupHttpProxy) and WebSocket (#setupWebsocketProxy onMessage) handlers
+- Logging via `this.logger?.info()` and `this.logger?.trace()`
 
 ---
 
 # Progress Log
+
+## 2026-01-13 - US-001
+Thread: https://ampcode.com/threads/T-019bba0f-34e1-716c-8dcc-243ea8aa9eeb
+- Implemented pre-request delay via PROXY_PRE_DELAY_MS environment variable
+- Created `src/utils/sleep.ts` utility function
+- Added `preDelayMs` property to ProxyServer read from env
+- Applied pre-delay before forwarding in HTTP handler (before fetch)
+- Applied pre-delay in WebSocket handler (before upstream.send)
+- Added logging at startup when pre-delay is set
+- Files changed: src/ProxyServer.ts, src/utils/sleep.ts
+- **Learnings for future iterations:**
+  - Use node v18+ for TypeScript compilation (tsc path: node_modules/typescript/bin/tsc)
+  - WebSocket onMessage handler made async to support await for delay
+---
 

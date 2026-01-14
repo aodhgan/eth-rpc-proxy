@@ -46,3 +46,17 @@ Thread: https://ampcode.com/threads/T-019bba15-57b0-745e-8874-150377be8941
   - Existing delay properties (preDelayMs, postDelayMs) are already private, so methods just set them directly
   - bun is available for running tsc when pnpm/npx/node aren't in PATH
 ---
+
+## 2026-01-13 - US-004
+Thread: https://ampcode.com/threads/T-019bba16-9816-76d9-a60b-ddd2509fb8c5
+- Added delay tests in tests/delay.test.ts
+- Tests verify pre-delay adds latency to HTTP and WebSocket requests
+- Tests verify post-delay adds latency to HTTP and WebSocket responses
+- Tests verify combined pre+post delays work correctly
+- Tests verify setting delay to 0 disables it
+- Files changed: tests/delay.test.ts
+- **Learnings for future iterations:**
+  - Use different ports (4011/4012) for test isolation to avoid conflicts with other test files
+  - beforeEach resets delays to 0 for test isolation
+  - Use performance.now() for timing measurements with tolerance margin (~10-15ms)
+---

@@ -12,6 +12,7 @@ import NodeWS from "ws";
 import type { TaggedLogger } from "./utils/logger";
 import { waitForCondition } from "./utils/waitForCondition";
 import { rawDataToUint8OrString, rawDataToString, truncateForLog, matches } from "./utils/helpers";
+import { sleep } from "./utils/sleep";
 
 // Prefer native WebSocket (workers), otherwise node 'ws'
 const WebSocketImpl: typeof NodeWS =
@@ -67,6 +68,9 @@ export class ProxyServer {
 	// per-method rules (first match wins)
 	private rules: BehaviorRule[] = [];
 
+	// delay configuration
+	private preDelayMs: number = 0;
+
 	constructor(
 		upstreamUrl: string | URL,
 		proxyPort: number,
@@ -75,6 +79,12 @@ export class ProxyServer {
 	) {
 		this.#UPSTREAM = upstreamUrl instanceof URL ? upstreamUrl : new URL(upstreamUrl);
 		this.#PROXY_PORT = proxyPort;
+
+		// Read delay configuration from environment
+		const preDelayEnv = process.env.PROXY_PRE_DELAY_MS;
+		if (preDelayEnv) {
+			this.preDelayMs = Number.parseInt(preDelayEnv, 10) || 0;
+		}
 
 		this.app = new Hono();
 		this.app.use("*", cors());
@@ -170,6 +180,9 @@ export class ProxyServer {
 	public async start(): Promise<void> {
 		this.server = serve({ fetch: this.app.fetch, port: this.#PROXY_PORT }) as AnyServer;
 		this.logger?.info(`Proxy listening on :${this.#PROXY_PORT} → ${this.upstreamHttpUrl}`);
+		if (this.preDelayMs > 0) {
+			this.logger?.info(`Pre-delay: ${this.preDelayMs}ms`);
+		}
 		this.injectWebSocket?.(this.server);
 	}
 	public async stop(): Promise<void> {
@@ -268,7 +281,7 @@ export class ProxyServer {
 				const requestIdMap = new Map<number | string, { method: string; start: number }>();
 
 				return {
-					onMessage: (msg, appClient) => {
+					onMessage: async (msg, appClient) => {
 						const parsed = JSON.parse(msg.data.toString());
 						const paramsStr = parsed.params ? ` ${JSON.stringify(parsed.params)}` : "";
 						this.logger?.info(`[ws] -> ${parsed.method ?? "unknown"}${paramsStr}`);
@@ -283,6 +296,11 @@ export class ProxyServer {
 								start: performance.now(),
 							});
 							setTimeout(() => requestIdMap.delete(parsed.id), 30_000); // GC safeguard
+						}
+
+						// Apply pre-delay before forwarding
+						if (this.preDelayMs > 0) {
+							await sleep(this.preDelayMs);
 						}
 
 						waitForCondition(
@@ -373,6 +391,11 @@ export class ProxyServer {
 
 			const maybe = this.#handleBehaviorHttp(c, behavior);
 			if (maybe) return maybe;
+
+			// Apply pre-delay before forwarding
+			if (this.preDelayMs > 0) {
+				await sleep(this.preDelayMs);
+			}
 
 			// Forward
 			const incoming = new URL(c.req.url);

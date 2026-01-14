@@ -1,0 +1,66 @@
+{
+  "project": "eth-rpc-proxy",
+  "branchName": "ralph/request-delay",
+  "description": "Request Delay Feature - Add configurable pre/post delays to simulate slow network conditions for testing",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add pre-request delay via environment variable",
+      "description": "As a developer, I want to set a delay before requests are forwarded to upstream so that I can simulate slow network conditions.",
+      "acceptanceCriteria": [
+        "PROXY_PRE_DELAY_MS environment variable sets delay in milliseconds before forwarding",
+        "Delay is applied to both HTTP and WebSocket requests",
+        "Default value is 0 (no delay)",
+        "Delay value is logged at startup if set",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add post-response delay via environment variable",
+      "description": "As a developer, I want to set a delay after receiving upstream responses so that I can simulate slow response delivery.",
+      "acceptanceCriteria": [
+        "PROXY_POST_DELAY_MS environment variable sets delay in milliseconds before sending response to client",
+        "Delay is applied to both HTTP and WebSocket responses",
+        "Default value is 0 (no delay)",
+        "Delay value is logged at startup if set",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Support programmatic delay configuration",
+      "description": "As a developer using the library, I want to configure delays programmatically so that I can set them in my test setup.",
+      "acceptanceCriteria": [
+        "setPreDelay(ms: number) method added to ProxyServer",
+        "setPostDelay(ms: number) method added to ProxyServer",
+        "Methods override environment variable values",
+        "Passing 0 disables the delay",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Add delay tests",
+      "description": "As a developer, I want tests to verify delay behavior works correctly.",
+      "acceptanceCriteria": [
+        "Test verifies pre-delay adds expected latency to request",
+        "Test verifies post-delay adds expected latency to response",
+        "Test verifies combined delays work correctly",
+        "Tests pass with pnpm test"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
